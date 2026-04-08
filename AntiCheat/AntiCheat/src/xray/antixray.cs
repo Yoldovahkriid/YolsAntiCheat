@@ -13,16 +13,13 @@ namespace AntiCheat
         [ThreadStatic]
         private static Dictionary<int, int> _restoreCache;
 
-        [ThreadStatic]
-        private static Random _random;
-
         public static void Prefix(ChunkData __instance, out Dictionary<int, int> __state)
         {
             __state = null;
 
             // Skip if the method is run on the SaveWorld thread to avoid save corruption
-            string? threadName = Thread.CurrentThread.Name;
-            if (threadName == "SaveWorld" || threadName is null)
+            string threadName = Thread.CurrentThread.Name;
+            if (threadName == "SaveWorld" || threadName == null)
             {
                 return;
             }
@@ -33,20 +30,14 @@ namespace AntiCheat
             int paletteCount = __instance.blocksLayer.paletteCount;
             if (palette == null) return;
 
-            // Check if the chunk contains any rock blocks before doing expensive processing
-            bool hasRock = false;
+            // Check if the chunk contains any ores before doing expensive processing
+            bool hasOre = false;
             for (int i = 0; i < paletteCount; i++)
             {
-                if (AntiCheatModSystem.RockBlockIds.Contains(palette[i]))
-                {
-                    hasRock = true;
-                    break;
-                }
+                if (AntiCheatModSystem.OreBlockIds.Contains(palette[i])) { hasOre = true; break; }
             }
-            if (!hasRock) return;
+            if (!hasOre) return;
 
-            // Initialize thread-local random and restore cache
-            if (_random == null) _random = new Random();
             if (_restoreCache == null) _restoreCache = new Dictionary<int, int>();
             _restoreCache.Clear();
             __state = _restoreCache;
@@ -60,19 +51,13 @@ namespace AntiCheat
                         int index = (y * 32 + z) * 32 + x;
                         int blockId = __instance.GetSolidBlock(index);
 
-                        // If this is a rock block that's completely buried
-                        if (AntiCheatModSystem.RockBlockIds.Contains(blockId))
+                        if (AntiCheatModSystem.OreBlockIds.Contains(blockId))
                         {
+                            // If the ore is completely buried, swap it with granite
                             if (!IsExposed(__instance, x, y, z))
                             {
-                                // Check if this rock type has any ores that can spawn in it
-                                if (AntiCheatModSystem.RockToOresMap.TryGetValue(blockId, out var possibleOres) && possibleOres.Count > 0)
-                                {
-                                    // Replace with a random ore from the possible ores for this rock type
-                                    int randomOre = possibleOres[_random.Next(possibleOres.Count)];
-                                    __state[index] = blockId;
-                                    __instance.SetBlockUnsafe(index, randomOre);
-                                }
+                                __state[index] = blockId;
+                                __instance.SetBlockUnsafe(index, AntiCheatModSystem.FakeBlockId);
                             }
                         }
                     }
@@ -84,11 +69,11 @@ namespace AntiCheat
         {
             if (__state == null || __state.Count == 0) return;
 
-            // Restore original rock blocks after compression
             foreach (var kvp in __state)
             {
                 __instance.SetBlockUnsafe(kvp.Key, kvp.Value);
             }
+            __state = null;
         }
 
         private static bool IsExposed(ChunkData chunk, int x, int y, int z)
@@ -96,7 +81,6 @@ namespace AntiCheat
             // Treat chunk edges as exposed to avoid cross-chunk lookups
             if (x == 0 || x == 31 || y == 0 || y == 31 || z == 0 || z == 31) return true;
 
-            // A block is exposed if any adjacent block is air
             return IsAir(chunk, x + 1, y, z) || IsAir(chunk, x - 1, y, z) ||
                    IsAir(chunk, x, y + 1, z) || IsAir(chunk, x, y - 1, z) ||
                    IsAir(chunk, x, y, z + 1) || IsAir(chunk, x, y, z - 1);
