@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="AntiCheat/AntiCheat/AntiCheat.csproj" />
+  <Project Path="AntiCheat/CakeBuild/CakeBuild.csproj" />
+</Solution>
